@@ -1,0 +1,44 @@
+use ui;
+use notepad;
+
+ui::window("Two-Way Binding Demo", 760, 560);
+ui::column_begin("root");
+ui::label("hint", "Both fields mirror each other. No manual update needed.");
+ui::row_begin("inputs");
+ui::column_begin("left");
+ui::text_input("a", "A", "", "Edit me");
+ui::label("status_a", ui::get_value("status"));
+ui::column_end();
+ui::column_begin("right");
+ui::text_input("b", "B", "", "Mirrors A");
+ui::label("status_b", ui::get_value("status"));
+ui::column_end();
+ui::row_end();
+ui::row_begin("actions");
+ui::button("format", "Format A");
+ui::button("save", "Save note");
+ui::row_end();
+ui::label("status", ui::get_value("status"));
+ui::column_end();
+
+ui::bind_value("a", "b");
+ui::bind_value("b", "a");
+
+ui::bind_click("format", "format");
+ui::bind_click("save", "save");
+
+ui::on("format", || {
+    let formatted: string = notepad::format_note(ui::get_value("a"));
+    ui::set_value("a", formatted);
+    ui::set_value("status", "Formatted through RustScript");
+});
+
+ui::on("save", || {
+    let saved: string = notepad::save_note(
+        ui::get_value("status"),
+        ui::get_value("a"),
+    );
+    ui::set_value("status", saved);
+});
+
+ui::finish();

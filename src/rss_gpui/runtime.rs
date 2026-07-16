@@ -113,6 +113,7 @@ enum UiOperation {
     Button,
     BindClick,
     OnClick,
+    BindValue,
     EventName,
     GetValue,
     SetValue,
@@ -166,6 +167,10 @@ impl UiOperation {
                 name: "ui::on_click",
                 arity: 2,
             },
+            Self::BindValue => HostSignature {
+                name: "ui::bind_value",
+                arity: 2,
+            },
             Self::EventName => HostSignature {
                 name: "ui::event_name",
                 arity: 0,
@@ -186,7 +191,7 @@ impl UiOperation {
     }
 }
 
-const UI_OPERATIONS: [UiOperation; 15] = [
+const UI_OPERATIONS: [UiOperation; 16] = [
     UiOperation::Window,
     UiOperation::ColumnBegin,
     UiOperation::ColumnEnd,
@@ -198,6 +203,7 @@ const UI_OPERATIONS: [UiOperation; 15] = [
     UiOperation::Button,
     UiOperation::BindClick,
     UiOperation::OnClick,
+    UiOperation::BindValue,
     UiOperation::EventName,
     UiOperation::GetValue,
     UiOperation::SetValue,
@@ -239,8 +245,9 @@ impl RssGpuiRuntime {
 
     pub fn dispatch(&mut self, event: UiEvent) -> Result<DispatchResult, ScriptError> {
         let event_name = match event {
-            UiEvent::InputChanged { id, value } => {
+            UiEvent::InputChanged { ref id, value } => {
                 self.state.set(id.clone(), value);
+                self.propagate_value_bindings_from(id);
                 format!("input:{id}")
             }
             UiEvent::Click(node_id) => {
@@ -263,6 +270,19 @@ impl RssGpuiRuntime {
         self.state = result.state.clone();
         self.last_tree = Some(result.tree.clone());
         Ok(result)
+    }
+
+    fn propagate_value_bindings_from(&mut self, source_id: &str) {
+        let Some(tree) = self.last_tree.as_ref() else {
+            return;
+        };
+        let Some(value) = self.state.value(source_id) else {
+            return;
+        };
+        let value = value.to_owned();
+        for target in tree.value_binding_targets(source_id) {
+            self.state.set(target.to_string(), value.clone());
+        }
     }
 
     fn execute(&self, source: &str, event_name: &str) -> Result<DispatchResult, ScriptError> {
@@ -415,6 +435,13 @@ fn invoke_ui(
             host_result(context.builder_mut()?.bind_click(
                 string_arg(args, 0, "ui::bind_click")?.as_str(),
                 string_arg(args, 1, "ui::bind_click")?.as_str(),
+            ))?;
+            unit()
+        }
+        UiOperation::BindValue => {
+            host_result(context.builder_mut()?.bind_value(
+                string_arg(args, 0, "ui::bind_value")?.as_str(),
+                string_arg(args, 1, "ui::bind_value")?.as_str(),
             ))?;
             unit()
         }

@@ -78,6 +78,7 @@ pub struct UiTree {
     pub window: WindowSpec,
     pub root: UiNode,
     click_bindings: BTreeMap<String, String>,
+    value_bindings: Vec<(String, String)>,
 }
 
 impl UiTree {
@@ -85,16 +86,31 @@ impl UiTree {
         window: WindowSpec,
         root: UiNode,
         click_bindings: BTreeMap<String, String>,
+        value_bindings: Vec<(String, String)>,
     ) -> Self {
         Self {
             window,
             root,
             click_bindings,
+            value_bindings,
         }
     }
 
     pub fn click_event(&self, node_id: &str) -> Option<&str> {
         self.click_bindings.get(node_id).map(String::as_str)
+    }
+
+    pub fn value_binding_targets(&self, source: &str) -> Vec<&str> {
+        self.value_bindings
+            .iter()
+            .filter_map(|(from, to)| {
+                if from == source {
+                    Some(to.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 

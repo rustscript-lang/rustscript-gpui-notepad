@@ -7,7 +7,10 @@ pub struct UiBuilder {
     stack: Vec<UiNode>,
     node_ids: BTreeSet<String>,
     click_bindings: BTreeMap<String, String>,
+    value_bindings: Vec<(String, String)>,
     buttons: BTreeSet<String>,
+    text_input_ids: BTreeSet<String>,
+    text_area_ids: BTreeSet<String>,
     finished: bool,
 }
 
@@ -18,7 +21,10 @@ impl UiBuilder {
             stack: vec![UiNode::root()],
             node_ids: BTreeSet::new(),
             click_bindings: BTreeMap::new(),
+            value_bindings: Vec::new(),
             buttons: BTreeSet::new(),
+            text_input_ids: BTreeSet::new(),
+            text_area_ids: BTreeSet::new(),
             finished: false,
         }
     }
@@ -64,6 +70,7 @@ impl UiBuilder {
         label: &str,
         placeholder: &str,
     ) -> Result<(), ScriptError> {
+        self.text_input_ids.insert(id.into());
         self.insert_leaf(
             id,
             NodeKind::TextInput {
@@ -79,6 +86,7 @@ impl UiBuilder {
         label: &str,
         placeholder: &str,
     ) -> Result<(), ScriptError> {
+        self.text_area_ids.insert(id.into());
         self.insert_leaf(
             id,
             NodeKind::TextArea {
@@ -115,6 +123,26 @@ impl UiBuilder {
         Ok(())
     }
 
+    pub fn bind_value(&mut self, from: &str, to: &str) -> Result<(), ScriptError> {
+        if from.is_empty() || to.is_empty() {
+            return Err(ScriptError::new("ui::bind_value requires non-empty ids"));
+        }
+        if from == to {
+            return Err(ScriptError::new(
+                "ui::bind_value source and target must differ",
+            ));
+        }
+        for id in [from, to] {
+            if !self.text_input_ids.contains(id) && !self.text_area_ids.contains(id) {
+                return Err(ScriptError::new(format!(
+                    "ui::bind_value references unknown id '{id}'"
+                )));
+            }
+        }
+        self.value_bindings.push((from.into(), to.into()));
+        Ok(())
+    }
+
     pub fn finish(mut self) -> Result<UiTree, ScriptError> {
         if self.finished {
             return Err(ScriptError::new("ui::finish may only be called once"));
@@ -129,7 +157,12 @@ impl UiBuilder {
             ));
         }
         let root = self.stack.pop().expect("root node is always present");
-        Ok(UiTree::new(window, root, self.click_bindings))
+        Ok(UiTree::new(
+            window,
+            root,
+            self.click_bindings,
+            self.value_bindings,
+        ))
     }
 
     fn begin_container(&mut self, id: &str, kind: NodeKind) -> Result<(), ScriptError> {

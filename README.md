@@ -57,13 +57,35 @@ ui::finish();
 | `ui::on(event, || { ... })` | Registers one handler body in the reusable dispatch table. |
 | `ui::get_value(id)` / `ui::set_value(id, value)` | Reads and updates UI state. |
 | `ui::label(id, text)` | Declares text. |
-| `ui::finish()` | Completes the frame declaration. |
+|| `ui::finish()` | Completes the frame declaration. ||
+|| `ui::bind_value(from, to)` | Links two editable ids. Changing either field's value at runtime updates the linked partner without any script-side assignment. Forward declarations are validated: both `from` and `to` must already be registered as `text_input` or `text_area` nodes, and self-loops are rejected. ||
 
 ## Host capabilities
 
 A desktop app supplies a `HostModule`. It exposes a fixed list of import names and arities, then binds each host function to the VM. The framework validates every RSS import before execution. The notepad module provides `notepad::format_note` and `notepad::save_note`; event handling in `scripts/notepad.rss` invokes both through regular button clicks.
 
 The runtime has no application event loop. `DispatchProgram` extracts every `ui::on` block into an event-name table. GPUI input subscriptions and click callbacks call `RssGpuiRuntime::dispatch`; the runtime selects the relevant handler source by key, executes it, and produces the next typed UI tree.
+
+## Two-way binding example
+
+`scripts/two_way.rss` demonstrates how `ui::bind_value` mirrors two inputs without manual assignments:
+
+```text
+ui::bind_value("a", "b");
+ui::bind_value("b", "a");
+```
+
+Rendering reads the current `a` and `b` values through `UiState` and feeds them to `InputState`. When the user types in `a`, the runtime:
+
+1. Writes the new value to `UiState`.
+2. Walks the `value_bindings` stored in `UiTree` and copies the value into every linked target.
+3. Reconciles each target `InputState` with the updated value during the next render.
+
+One-way binding still works for read-only mirrors:
+
+```text
+ui::bind_value("source", "read_only_display");
+```
 
 ## Checks
 
