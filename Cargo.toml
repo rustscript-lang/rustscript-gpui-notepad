@@ -1,0 +1,13 @@
+[package]
+name = "rustscript-gpui-notepad"
+version = "0.1.0"
+edition = "2024"
+description = "A GPUI notepad scripted with RustScript host functions"
+license = "MIT"
+
+[dependencies]
+gpui = "0.2.2"
+vm = { package = "pd-vm", path = "/home/wow/rustscript/rustscript", default-features = false, features = ["runtime"] }
+
+[dev-dependencies]
+tempfile = "3"
