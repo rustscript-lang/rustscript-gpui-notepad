@@ -14,13 +14,15 @@ ui::row_end();
 ui::label("status", ui::get_value("status"));
 ui::column_end();
 
-let event: string = ui::event_name();
-if event == "format" {
+ui::on("format", || {
     let formatted: string = notepad::format_note(ui::get_value("body"));
     ui::set_value("body", formatted);
     ui::set_value("status", "Formatted through RustScript");
-} else if event == "save" {
+});
+
+ui::on("save", || {
     let saved: string = notepad::save_note(ui::get_value("title"), ui::get_value("body"));
     ui::set_value("status", saved);
-}
+});
+
 ui::finish();

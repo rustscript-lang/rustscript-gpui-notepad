@@ -12,14 +12,15 @@ Rust never contains title/body/button business logic. It renders a generic `UiTr
 
 ```text
 GPUI native callback
-  -> RssGpuiController::dispatch(UiEvent)
-  -> RssGpuiRuntime executes the selected .rss document
+  -> RssGpuiRuntime::dispatch(UiEvent)
+  -> DispatchProgram resolves the event name through its handler table
+  -> RssGpuiRuntime executes the selected RSS document
   -> dynamic ui::* hosts construct UiTree and mutate UiState
   -> optional app HostModule custom hosts run
   -> generic GPUI renderer reconciles UiTree into native elements
 ```
 
-There is no polling or hand-written single-loop event dispatcher. Each GPUI click and text-change callback immediately dispatches a typed `UiEvent` through the controller. The controller is reusable by any desktop app that supplies an RSS document and optional host modules.
+There is no polling, hand-written single-loop event dispatcher, or script-side event chain. Each GPUI click and text-change callback immediately dispatches a typed `UiEvent`. `DispatchProgram` is reusable by any desktop app that supplies an RSS document and optional host modules.
 
 ## Framework modules
 
@@ -27,11 +28,11 @@ There is no polling or hand-written single-loop event dispatcher. Each GPUI clic
 |---|---|
 | `src/rss_gpui/model.rs` | Public `UiTree`, `UiNode`, `NodeKind`, `Layout`, `UiState`, `UiEvent`, `ScriptError` types |
 | `src/rss_gpui/builder.rs` | Validates ordered `ui::*` builder calls and produces one `UiTree` per script execution |
+| `src/rss_gpui/dispatch.rs` | Parses `ui::on(event, || { ... })` syntax sugar and indexes independent handler sources by event name |
 | `src/rss_gpui/runtime.rs` | Source loading, import allow-listing, fuel limits, per-execution context, host binding, and event dispatch |
-| `src/rss_gpui/hosts.rs` | Reusable dynamic `ui::*` host factories: window, column, row, label, text input, text area, button, bind_click, get_value, set_value, set_status, event_name, finish |
 | `src/rss_gpui/renderer.rs` | Generic GPUI renderer: maps `UiNode` types to GPUI elements and attaches callbacks from script-provided bindings |
 | `src/notepad_hosts.rs` | Example-only `notepad::*` custom host functions for text formatting and Markdown persistence |
-| `src/main.rs` | Minimal app shell: loads `scripts/notepad.rss`, registers `NotepadHostModule`, delegates rendering to `RssGpuiController` |
+| `src/main.rs` | Minimal app shell: loads `scripts/notepad.rss`, registers `NotepadHostModule`, and opens `RssGpuiView` |
 
 `HostModule` is the framework extension point. Its `bind(vm, execution_context)` method adds an app namespace while the generic framework always binds `ui::*`. A new desktop project reuses `rss_gpui`, writes its own RSS document, and adds only its own host module(s).
 
@@ -49,26 +50,27 @@ ui::text_input("title", "Title", "Untitled", "Note title");
 ui::text_area("body", "Body", "", "Write here...");
 ui::row_begin("actions");
 ui::button("format", "Format");
-ui::bind_click("format", "format");
+ui::on_click("format", "format");
 ui::button("save", "Save");
-ui::bind_click("save", "save");
+ui::on_click("save", "save");
 ui::row_end();
 ui::label("status", ui::get_value("status"));
 ui::column_end();
 
-let event = ui::event_name();
-if event == "format" {
+ui::on("format", || {
     let formatted = notepad::format_note(ui::get_value("body"));
     ui::set_value("body", formatted);
     ui::set_value("status", "Formatted through RustScript");
-} else if event == "save" {
+});
+
+ui::on("save", || {
     let saved = notepad::save_note(ui::get_value("title"), ui::get_value("body"));
     ui::set_value("status", saved);
-}
+});
 ui::finish();
 ```
 
-`text_input` and `text_area` initialize defaults only when a field has no value. Their native GPUI change callbacks emit `UiEvent::InputChanged { id, value }`. `bind_click` maps a button node ID to an arbitrary RSS event name. The generic renderer attaches each native listener from that mapping.
+`text_input` and `text_area` initialize defaults only when a field has no value. Their native GPUI change callbacks emit `UiEvent::InputChanged { id, value }`. `on_click` maps a button node ID to an arbitrary RSS event name. `ui::on` registers an independent zero-argument handler body. `DispatchProgram` removes those handler declarations from the render source and selects one indexed handler source for a matching event. The generic renderer attaches each native listener from the button mapping.
 
 ## Custom host functions
 
@@ -83,7 +85,7 @@ The framework binds `ui::*` and the application module with `Vm::bind_args_funct
 ## Verification
 
 - Unit-test builder nesting, missing `finish`, duplicate node IDs, invalid click bindings, default values, and UI-state mutation.
-- Unit-test event dispatch: a scripted button binding must invoke the matching RSS branch and produce state changes.
+- Unit-test event dispatch: independent `ui::on` handlers must route through the shared dispatch table and produce state changes.
 - Integration-test custom `notepad::*` calls through the RSS document: format alters `body`; save writes expected Markdown.
-- Build the native GPUI binary and execute `--script-smoke`, which dispatches `format` then `save` through the same reusable controller without creating a window.
-- Manually launch the desktop application when a display server is available and use the buttons to confirm native callbacks update the rendered tree.
+- Build the native GPUI binary and run the RSS event integration tests that dispatch `format` then `save` through the same reusable runtime.
+- Launch the desktop application under a display server or Xvfb and confirm the GPUI window remains active.

@@ -7,6 +7,7 @@ use vm::{
 };
 
 use super::builder::UiBuilder;
+use super::dispatch::DispatchProgram;
 use super::model::{DispatchResult, ScriptError, UiEvent, UiState, UiTree};
 
 const MAX_SOURCE_BYTES: usize = 64 * 1024;
@@ -204,7 +205,7 @@ const UI_OPERATIONS: [UiOperation; 15] = [
 ];
 
 pub struct RssGpuiRuntime {
-    source: String,
+    dispatcher: DispatchProgram,
     modules: Vec<Arc<dyn HostModule>>,
     state: UiState,
     last_tree: Option<UiTree>,
@@ -222,7 +223,7 @@ impl RssGpuiRuntime {
             )));
         }
         Ok(Self {
-            source,
+            dispatcher: DispatchProgram::parse(source)?,
             modules,
             state: UiState::default(),
             last_tree: None,
@@ -230,7 +231,7 @@ impl RssGpuiRuntime {
     }
 
     pub fn render(&mut self) -> Result<DispatchResult, ScriptError> {
-        let result = self.execute("")?;
+        let result = self.execute(self.dispatcher.render_source(), "")?;
         self.state = result.state.clone();
         self.last_tree = Some(result.tree.clone());
         Ok(result)
@@ -244,7 +245,7 @@ impl RssGpuiRuntime {
             }
             UiEvent::Click(node_id) => {
                 if self.last_tree.is_none() {
-                    let initial = self.execute("")?;
+                    let initial = self.execute(self.dispatcher.render_source(), "")?;
                     self.state = initial.state;
                     self.last_tree = Some(initial.tree);
                 }
@@ -258,15 +259,15 @@ impl RssGpuiRuntime {
             }
         };
 
-        let result = self.execute(&event_name)?;
+        let result = self.execute(self.dispatcher.source_for(&event_name), &event_name)?;
         self.state = result.state.clone();
         self.last_tree = Some(result.tree.clone());
         Ok(result)
     }
 
-    fn execute(&self, event_name: &str) -> Result<DispatchResult, ScriptError> {
+    fn execute(&self, source: &str, event_name: &str) -> Result<DispatchResult, ScriptError> {
         let compiled =
-            compile_source(&self.source).map_err(|error| ScriptError::new(error.to_string()))?;
+            compile_source(source).map_err(|error| ScriptError::new(error.to_string()))?;
         let allowed = self.allowed_imports();
         for import in &compiled.program.imports {
             let expected_arity = allowed.get(import.name.as_str()).ok_or_else(|| {

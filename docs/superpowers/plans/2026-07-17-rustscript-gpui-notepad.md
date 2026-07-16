@@ -14,14 +14,15 @@
 
 - `src/rss_gpui/model.rs`: UI tree, state, event, and error data.
 - `src/rss_gpui/builder.rs`: checked builder call ordering and tree materialization.
+- `src/rss_gpui/dispatch.rs`: reusable parser and event-name table for `ui::on(event, || { ... })` handlers.
 - `src/rss_gpui/runtime.rs`: source execution, import validation, limits, dynamic host modules.
-- `src/rss_gpui/hosts.rs`: generic `ui::*` host function adapters.
 - `src/rss_gpui/renderer.rs`: generic GPUI reconciliation and event callbacks.
 - `src/notepad_hosts.rs`: example-only custom formatting/save hosts.
-- `src/main.rs`: app shell and `--script-smoke` entry point.
+- `src/main.rs`: app shell that opens the generic `RssGpuiView`.
 - `scripts/notepad.rss`: authoritative notepad declaration and behavior.
 - `tests/builder_tests.rs`: generic builder behavior.
 - `tests/runtime_tests.rs`: generic scripted event/state behavior.
+- `tests/dispatch_sugar_tests.rs`: independent named handlers route through the shared event table.
 - `tests/notepad_script_tests.rs`: end-to-end app host behavior.
 
 ### Task 1: Define generic script-owned UI data

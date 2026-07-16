@@ -35,12 +35,11 @@ ui::on_click("create", "create-task");
 ui::label("status", ui::get_value("status"));
 ui::column_end();
 
-let event: string = ui::event_name();
-if event == "create-task" {
+ui::on("create-task", || {
     let title: string = ui::get_value("title");
     let status: string = app::create_task(title);
     ui::set_value("status", status);
-}
+});
 ui::finish();
 ```
 
@@ -54,8 +53,8 @@ ui::finish();
 | `ui::text_input(id, label, default, placeholder)` | Declares a single-line editable control. |
 | `ui::text_area(id, label, default, placeholder)` | Declares a multi-line editable control. |
 | `ui::button(id, label)` | Declares a clickable control. |
-| `ui::on_click(id, event)` | Binds the button to an RSS event name. |
-| `ui::event_name()` | Reads the active event name. |
+| `ui::on_click(id, event)` | Binds the button to a named event. |
+| `ui::on(event, || { ... })` | Registers one handler body in the reusable dispatch table. |
 | `ui::get_value(id)` / `ui::set_value(id, value)` | Reads and updates UI state. |
 | `ui::label(id, text)` | Declares text. |
 | `ui::finish()` | Completes the frame declaration. |
@@ -64,7 +63,7 @@ ui::finish();
 
 A desktop app supplies a `HostModule`. It exposes a fixed list of import names and arities, then binds each host function to the VM. The framework validates every RSS import before execution. The notepad module provides `notepad::format_note` and `notepad::save_note`; event handling in `scripts/notepad.rss` invokes both through regular button clicks.
 
-The runtime has no application event loop. GPUI input subscriptions and click callbacks call `RssGpuiRuntime::dispatch`, which executes the declared RSS event and produces the next typed UI tree.
+The runtime has no application event loop. `DispatchProgram` extracts every `ui::on` block into an event-name table. GPUI input subscriptions and click callbacks call `RssGpuiRuntime::dispatch`; the runtime selects the relevant handler source by key, executes it, and produces the next typed UI tree.
 
 ## Checks
 
