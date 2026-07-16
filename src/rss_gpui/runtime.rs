@@ -13,7 +13,7 @@ const MAX_SOURCE_BYTES: usize = 64 * 1024;
 const VM_FUEL: u64 = 100_000;
 const VM_FUEL_CHECK_INTERVAL: u32 = 32;
 
-type ExecutionContextHandle = Arc<Mutex<ExecutionContext>>;
+pub type ExecutionContextHandle = Arc<Mutex<ExecutionContext>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostSignature {

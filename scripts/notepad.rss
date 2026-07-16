@@ -1,0 +1,26 @@
+use ui;
+use notepad;
+
+ui::window("RustScript GPUI Notepad", 760, 560);
+ui::column_begin("root");
+ui::text_input("title", "Title", "Untitled", "Note title");
+ui::text_area("body", "Body", "", "Write here...");
+ui::row_begin("actions");
+ui::button("format", "Format");
+ui::bind_click("format", "format");
+ui::button("save", "Save");
+ui::bind_click("save", "save");
+ui::row_end();
+ui::label("status", ui::get_value("status"));
+ui::column_end();
+
+let event: string = ui::event_name();
+if event == "format" {
+    let formatted: string = notepad::format_note(ui::get_value("body"));
+    ui::set_value("body", formatted);
+    ui::set_value("status", "Formatted through RustScript");
+} else if event == "save" {
+    let saved: string = notepad::save_note(ui::get_value("title"), ui::get_value("body"));
+    ui::set_value("status", saved);
+}
+ui::finish();
