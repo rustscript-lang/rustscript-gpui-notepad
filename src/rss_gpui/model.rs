@@ -97,3 +97,34 @@ impl UiTree {
         self.click_bindings.get(node_id).map(String::as_str)
     }
 }
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UiState {
+    values: BTreeMap<String, String>,
+}
+
+impl UiState {
+    pub fn value(&self, id: &str) -> Option<&str> {
+        self.values.get(id).map(String::as_str)
+    }
+
+    pub fn set(&mut self, id: impl Into<String>, value: impl Into<String>) {
+        self.values.insert(id.into(), value.into());
+    }
+
+    pub fn set_default(&mut self, id: impl Into<String>, value: impl Into<String>) {
+        self.values.entry(id.into()).or_insert_with(|| value.into());
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UiEvent {
+    Click(String),
+    InputChanged { id: String, value: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DispatchResult {
+    pub tree: UiTree,
+    pub state: UiState,
+}

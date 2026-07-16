@@ -54,6 +54,40 @@ impl UiBuilder {
         self.end_container(NodeKind::Row)
     }
 
+    pub fn label(&mut self, id: &str, text: &str) -> Result<(), ScriptError> {
+        self.insert_leaf(id, NodeKind::Label { text: text.into() })
+    }
+
+    pub fn text_input(
+        &mut self,
+        id: &str,
+        label: &str,
+        placeholder: &str,
+    ) -> Result<(), ScriptError> {
+        self.insert_leaf(
+            id,
+            NodeKind::TextInput {
+                label: label.into(),
+                placeholder: placeholder.into(),
+            },
+        )
+    }
+
+    pub fn text_area(
+        &mut self,
+        id: &str,
+        label: &str,
+        placeholder: &str,
+    ) -> Result<(), ScriptError> {
+        self.insert_leaf(
+            id,
+            NodeKind::TextArea {
+                label: label.into(),
+                placeholder: placeholder.into(),
+            },
+        )
+    }
+
     pub fn button(&mut self, id: &str, label: &str) -> Result<(), ScriptError> {
         self.insert_leaf(
             id,
