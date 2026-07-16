@@ -26,8 +26,10 @@ pub trait HostModule: Send + Sync {
     fn bind(&self, vm: &mut Vm, context: ExecutionContextHandle) -> Result<(), ScriptError>;
 }
 
+type HostCallback = dyn Fn(&[Value]) -> VmResult<CallOutcome> + Send;
+
 pub struct CallbackHost {
-    callback: Box<dyn Fn(&[Value]) -> VmResult<CallOutcome> + Send>,
+    callback: Box<HostCallback>,
 }
 
 impl CallbackHost {
@@ -109,6 +111,7 @@ enum UiOperation {
     TextArea,
     Button,
     BindClick,
+    OnClick,
     EventName,
     GetValue,
     SetValue,
@@ -158,6 +161,10 @@ impl UiOperation {
                 name: "ui::bind_click",
                 arity: 2,
             },
+            Self::OnClick => HostSignature {
+                name: "ui::on_click",
+                arity: 2,
+            },
             Self::EventName => HostSignature {
                 name: "ui::event_name",
                 arity: 0,
@@ -178,7 +185,7 @@ impl UiOperation {
     }
 }
 
-const UI_OPERATIONS: [UiOperation; 14] = [
+const UI_OPERATIONS: [UiOperation; 15] = [
     UiOperation::Window,
     UiOperation::ColumnBegin,
     UiOperation::ColumnEnd,
@@ -189,6 +196,7 @@ const UI_OPERATIONS: [UiOperation; 14] = [
     UiOperation::TextArea,
     UiOperation::Button,
     UiOperation::BindClick,
+    UiOperation::OnClick,
     UiOperation::EventName,
     UiOperation::GetValue,
     UiOperation::SetValue,
@@ -219,6 +227,13 @@ impl RssGpuiRuntime {
             state: UiState::default(),
             last_tree: None,
         })
+    }
+
+    pub fn render(&mut self) -> Result<DispatchResult, ScriptError> {
+        let result = self.execute("")?;
+        self.state = result.state.clone();
+        self.last_tree = Some(result.tree.clone());
+        Ok(result)
     }
 
     pub fn dispatch(&mut self, event: UiEvent) -> Result<DispatchResult, ScriptError> {
@@ -395,7 +410,7 @@ fn invoke_ui(
             ))?;
             unit()
         }
-        UiOperation::BindClick => {
+        UiOperation::BindClick | UiOperation::OnClick => {
             host_result(context.builder_mut()?.bind_click(
                 string_arg(args, 0, "ui::bind_click")?.as_str(),
                 string_arg(args, 1, "ui::bind_click")?.as_str(),
