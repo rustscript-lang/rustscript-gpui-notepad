@@ -1,100 +1,104 @@
-# RustScript GPUI Notepad Implementation Plan
+# RustScript-driven GPUI Notepad Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use codex-superpowers-subagent-driven-development (recommended) or codex-superpowers-executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use codex-superpowers-executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a native GPUI notepad whose button clicks run RustScript and invoke per-run custom Rust host functions for formatting and saving notes.
+**Goal:** Build a reusable GPUI/RustScript UI runtime and demonstrate it with an RSS-authored notepad whose native buttons invoke script-defined events and custom host functions.
 
-**Architecture:** GPUI owns visual state and click listeners. A library runtime converts each UI event into typed RustScript source, creates a VM, binds dynamic host functions that capture the selected notes directory, runs the script, and returns the top-of-stack string to the view.
+**Architecture:** `rss_gpui` is a reusable framework module. The RSS document calls restricted `ui::*` builder/state/event hosts to construct a native-agnostic `UiTree`; the framework renderer maps that tree into GPUI elements and callbacks. App-specific behavior enters only through `HostModule`, demonstrated by `notepad::*` format and save functions.
 
-**Tech Stack:** Rust 2024, GPUI 0.2, local `pd-vm`, RustScript, `tempfile`.
+**Tech Stack:** Rust 2024, GPUI 0.2.2, local runtime-only `pd-vm`, RustScript, `tempfile`.
 
 ---
 
 ## File structure
 
-- `Cargo.toml`: package, GPUI, local `pd-vm`, and test dependencies.
-- `src/lib.rs`: exposes `hosts` and `runtime`.
-- `src/hosts.rs`: format/save host factories and deterministic persistence helpers.
-- `src/runtime.rs`: event inputs, source construction, execution, and errors.
-- `src/main.rs`: GPUI entity and buttons wired to `dispatch_script_event`.
-- `scripts/notepad.rss`: editable event-to-host policy.
-- `tests/runtime_tests.rs`: runtime behavior tests.
-- `tests/script_smoke.rs`: checked-in script end-to-end coverage.
+- `src/rss_gpui/model.rs`: UI tree, state, event, and error data.
+- `src/rss_gpui/builder.rs`: checked builder call ordering and tree materialization.
+- `src/rss_gpui/runtime.rs`: source execution, import validation, limits, dynamic host modules.
+- `src/rss_gpui/hosts.rs`: generic `ui::*` host function adapters.
+- `src/rss_gpui/renderer.rs`: generic GPUI reconciliation and event callbacks.
+- `src/notepad_hosts.rs`: example-only custom formatting/save hosts.
+- `src/main.rs`: app shell and `--script-smoke` entry point.
+- `scripts/notepad.rss`: authoritative notepad declaration and behavior.
+- `tests/builder_tests.rs`: generic builder behavior.
+- `tests/runtime_tests.rs`: generic scripted event/state behavior.
+- `tests/notepad_script_tests.rs`: end-to-end app host behavior.
 
-### Task 1: Bootstrap the reusable runtime boundary
+### Task 1: Define generic script-owned UI data
 
 **Files:**
-- Create: `Cargo.toml`
-- Create: `.gitignore`
-- Create: `src/lib.rs`
-- Create: `src/hosts.rs`
-- Create: `src/runtime.rs`
-- Test: `tests/runtime_tests.rs`
+- Create: `Cargo.toml`, `.gitignore`, `src/lib.rs`
+- Create: `src/rss_gpui/mod.rs`, `src/rss_gpui/model.rs`, `src/rss_gpui/builder.rs`
+- Test: `tests/builder_tests.rs`
 
-- [ ] **Step 1: Write a failing formatting test**
+- [ ] **Step 1: Write a failing builder test**
 
 ```rust
 #[test]
-fn format_event_returns_host_formatted_body() {
-    let runtime = ScriptRuntime::new(tempdir().unwrap().path());
-    assert_eq!(runtime.dispatch("format", "Draft", "a  \n\n\nb  ").unwrap(), "a\n\nb");
+fn builder_preserves_script_declared_hierarchy_and_click_binding() {
+    let mut builder = UiBuilder::new();
+    builder.window("Demo", 640, 480).unwrap();
+    builder.column_begin("root").unwrap();
+    builder.button("save", "Save").unwrap();
+    builder.bind_click("save", "save-note").unwrap();
+    builder.column_end().unwrap();
+    let tree = builder.finish().unwrap();
+    assert_eq!(tree.click_event("save"), Some("save-note"));
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify failure**
+- [ ] **Step 2: Run RED**
 
-Run: `cargo test --test runtime_tests format_event_returns_host_formatted_body`
+Run: `cargo test --test builder_tests builder_preserves_script_declared_hierarchy_and_click_binding`
 
-Expected: FAIL because `ScriptRuntime` does not exist.
+Expected: FAIL because `UiBuilder` does not exist.
 
-- [ ] **Step 3: Add the smallest runtime implementation**
+- [ ] **Step 3: Implement only model and builder behavior**
 
-`ScriptRuntime::dispatch` concatenates an escaped typed prelude with a script body, compiles it, constructs a `Vm`, binds `notepad::format_note` and `notepad::save_note`, runs it, and converts one final `Value::String` to `String`.
+Create node types for column, row, label, text input, text area, and button; validate one window, unique IDs, balanced containers, button-before-binding, and explicit `finish`.
 
-- [ ] **Step 4: Run the focused test and verify success**
+- [ ] **Step 4: Run GREEN and complete builder suite**
 
-Run: `cargo test --test runtime_tests format_event_returns_host_formatted_body`
+Run: `cargo test --test builder_tests`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Cargo.toml .gitignore src/lib.rs src/hosts.rs src/runtime.rs tests/runtime_tests.rs
-git commit -m "feat: add RustScript notepad runtime"
+git add Cargo.toml Cargo.lock .gitignore src/lib.rs src/rss_gpui tests/builder_tests.rs
+git commit -m "feat: add RSS GPUI tree builder"
 ```
 
-### Task 2: Add file persistence through a dynamic host function
+### Task 2: Execute RSS documents through reusable ui hosts
 
 **Files:**
-- Modify: `src/hosts.rs`
-- Modify: `src/runtime.rs`
-- Modify: `tests/runtime_tests.rs`
+- Create: `src/rss_gpui/runtime.rs`, `src/rss_gpui/hosts.rs`
+- Modify: `src/rss_gpui/mod.rs`
+- Test: `tests/runtime_tests.rs`
 
-- [ ] **Step 1: Write a failing save test**
+- [ ] **Step 1: Write a failing event-dispatch test**
 
 ```rust
 #[test]
-fn save_event_writes_sanitized_markdown_note() {
-    let directory = tempdir().unwrap();
-    let runtime = ScriptRuntime::new(directory.path());
-    let saved = runtime.dispatch("save", "Ideas / 2026", "hello").unwrap();
-    assert_eq!(directory.path().join("notes/ideas-2026.md").read_to_string().unwrap(), "# Ideas / 2026\n\nhello\n");
-    assert!(saved.ends_with("notes/ideas-2026.md"));
+fn script_declares_button_binding_and_updates_state_for_its_event() {
+    let runtime = RssGpuiRuntime::from_source(SCRIPT, vec![]).unwrap();
+    let result = runtime.dispatch(UiEvent::Click("format".into())).unwrap();
+    assert_eq!(result.state.value("status"), Some("formatted"));
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify failure**
+- [ ] **Step 2: Run RED**
 
-Run: `cargo test --test runtime_tests save_event_writes_sanitized_markdown_note`
+Run: `cargo test --test runtime_tests script_declares_button_binding_and_updates_state_for_its_event`
 
-Expected: FAIL because `save` is unimplemented.
+Expected: FAIL because `RssGpuiRuntime` does not exist.
 
-- [ ] **Step 3: Implement the save host factory**
+- [ ] **Step 3: Implement restricted execution**
 
-Use `Vm::bind_args_function("notepad::save_note", ...)` with a closure that captures an `Arc<PathBuf>`. Validate exactly two `Value::String` arguments, create `notes/`, write Markdown, and return `CallOutcome::Return(CallReturn::one(Value::String(path)))`.
+`dispatch` resolves a click node ID to its script-declared event name, creates an execution context, binds `ui::*` dynamic `HostArgsFunction`s, verifies imports/arity, runs with bounded fuel, and returns a tree plus state. Implement `event_name`, `get_value`, `set_value`, widget declarations, and `finish` before adding any application host.
 
-- [ ] **Step 4: Run runtime tests and verify success**
+- [ ] **Step 4: Run GREEN and runtime suite**
 
 Run: `cargo test --test runtime_tests`
 
@@ -103,90 +107,82 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/hosts.rs src/runtime.rs tests/runtime_tests.rs
-git commit -m "feat: save notes through dynamic host function"
+git add src/rss_gpui tests/runtime_tests.rs
+git commit -m "feat: execute RSS UI events through reusable hosts"
 ```
 
-### Task 3: Make the checked-in RustScript policy executable
+### Task 3: Add app-defined custom host modules
 
 **Files:**
-- Create: `scripts/notepad.rss`
-- Create: `tests/script_smoke.rs`
-- Modify: `src/runtime.rs`
+- Create: `src/notepad_hosts.rs`, `scripts/notepad.rss`
+- Modify: `src/rss_gpui/runtime.rs`, `src/lib.rs`
+- Test: `tests/notepad_script_tests.rs`
 
-- [ ] **Step 1: Write a failing smoke test**
+- [ ] **Step 1: Write a failing end-to-end format test**
 
 ```rust
 #[test]
-fn checked_in_policy_routes_format_and_save_button_events() {
-    let directory = tempdir().unwrap();
-    let runtime = ScriptRuntime::from_project_script(directory.path()).unwrap();
-    assert_eq!(runtime.dispatch("format", "", "x  \n\n\ny").unwrap(), "x\n\ny");
-    runtime.dispatch("save", "Smoke", "saved").unwrap();
-    assert!(directory.path().join("notes/smoke.md").exists());
+fn rss_format_button_calls_notepad_host_and_rewrites_body() {
+    let runtime = notepad_runtime(tempdir().unwrap().path()).unwrap();
+    runtime.dispatch(UiEvent::InputChanged { id: "body".into(), value: "a  \n\n\nb  ".into() }).unwrap();
+    let result = runtime.dispatch(UiEvent::Click("format".into())).unwrap();
+    assert_eq!(result.state.value("body"), Some("a\n\nb"));
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify failure**
+- [ ] **Step 2: Run RED**
 
-Run: `cargo test --test script_smoke checked_in_policy_routes_format_and_save_button_events`
+Run: `cargo test --test notepad_script_tests rss_format_button_calls_notepad_host_and_rewrites_body`
 
-Expected: FAIL because `scripts/notepad.rss` does not exist.
+Expected: FAIL because the app module and RSS source do not exist.
 
-- [ ] **Step 3: Add the event policy**
+- [ ] **Step 3: Implement `HostModule` and notepad module**
 
-```rustscript
-use notepad;
-if event == "format" {
-    notepad::format_note(body)
-} else if event == "save" {
-    notepad::save_note(title, body)
-} else {
-    "unknown UI event"
-}
-```
+`HostModule` binds a namespace into the per-execution VM. `NotepadHostModule` captures a notes directory and supplies `notepad::format_note` and `notepad::save_note`. Write the notepad UI, button bindings, and its branches exclusively in `scripts/notepad.rss`.
 
-- [ ] **Step 4: Run smoke and all test targets**
+- [ ] **Step 4: Add RED/GREEN save coverage**
 
-Run: `cargo test --tests`
+Add a save-click test that asserts `notes/ideas-2026.md` contains `# Ideas / 2026\n\nhello\n`, first observe failure, then implement the save host.
+
+Run: `cargo test --test notepad_script_tests`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/notepad.rss src/runtime.rs tests/script_smoke.rs
-git commit -m "feat: add editable RustScript event policy"
+git add src/notepad_hosts.rs src/lib.rs src/rss_gpui/runtime.rs scripts/notepad.rss tests/notepad_script_tests.rs
+git commit -m "feat: add RSS authored notepad host module"
 ```
 
-### Task 4: Add the GPUI notepad and visual event wiring
+### Task 4: Render generic script UI with GPUI
 
 **Files:**
-- Create: `src/main.rs`
-- Modify: `Cargo.toml`
-- Modify: `README.md`
+- Create: `src/rss_gpui/renderer.rs`, `src/main.rs`, `README.md`
+- Modify: `src/rss_gpui/mod.rs`, `Cargo.toml`
+- Test: `src/rss_gpui/renderer.rs`
 
-- [ ] **Step 1: Add a failing unit test for the UI-independent action reducer**
+- [ ] **Step 1: Write a failing pure render-plan test**
 
 ```rust
 #[test]
-fn format_result_replaces_editor_body_and_save_result_updates_status() {
-    assert_eq!(apply_script_result(Event::Format, "formatted", "before", ""), ("formatted", "formatted"));
-    assert_eq!(apply_script_result(Event::Save, "path", "before", ""), ("before", "path"));
+fn render_plan_keeps_script_button_event_name() {
+    let plan = RenderPlan::from_tree(&tree_with_button("save", "save-note"));
+    assert_eq!(plan.button("save").unwrap().event_name, "save-note");
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify failure**
+- [ ] **Step 2: Run RED**
 
-Run: `cargo test --bin rustscript-gpui-notepad format_result_replaces_editor_body_and_save_result_updates_status`
+Run: `cargo test --lib render_plan_keeps_script_button_event_name`
 
-Expected: FAIL because `apply_script_result` does not exist.
+Expected: FAIL because `RenderPlan` does not exist.
 
-- [ ] **Step 3: Implement GPUI entity and click callbacks**
+- [ ] **Step 3: Implement renderer and app shell**
 
-Render native title/body editors, status text, and buttons. Button `on_click` callbacks capture the GPUI entity and call `dispatch_script_event(Event::Format)` or `dispatch_script_event(Event::Save)`, then notify the entity. Support `--script-smoke` to run the checked-in script without opening a window.
+Render each `UiNode` with GPUI elements. Each text change sends `UiEvent::InputChanged`; each button callback sends `UiEvent::Click(node_id)`. The renderer holds no notepad-specific branch. `main.rs` loads the script, configures the notepad module, opens the window, and supplies `--script-smoke`.
 
-- [ ] **Step 4: Run tests, format, lints, build, and smoke executable**
+- [ ] **Step 4: Verify native build and event path**
 
 Run:
 
@@ -198,34 +194,17 @@ cargo build
 cargo run -- --script-smoke
 ```
 
-Expected: all commands exit zero; smoke output reports both format and save activity.
+Expected: every command exits zero; smoke dispatches the same scripted click path for format and save and prints the saved path.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Cargo.toml src/main.rs README.md
-git commit -m "feat: add GPUI notepad event integration"
+git add src/rss_gpui/renderer.rs src/rss_gpui/mod.rs src/main.rs README.md Cargo.toml
+git commit -m "feat: render RSS UI through GPUI"
 ```
 
-### Task 5: Final verification
+### Task 5: Final validation
 
-**Files:**
-- Modify: `README.md`
-
-- [ ] **Step 1: Document run and scripted event flow**
-
-Document `cargo run`, `cargo run -- --script-smoke`, button-to-script-to-host flow, editable RSS policy, and output location.
-
-- [ ] **Step 2: Verify the working tree and runtime effect**
-
-Run:
-
-```bash
-git diff --check
-git status --short
-cargo test --all-targets
-cargo clippy --all-targets -- -D warnings
-cargo run -- --script-smoke
-```
-
-Expected: no whitespace errors; all tests/lints pass; smoke creates a note and prints its path.
+- [ ] Run `git diff --check`, `cargo test --all-targets`, `cargo clippy --all-targets -- -D warnings`, and `cargo run -- --script-smoke`.
+- [ ] Launch the desktop binary when a display server is available; verify text edits and both script-declared button events.
+- [ ] Confirm `git status --short` has no unexpected files.
