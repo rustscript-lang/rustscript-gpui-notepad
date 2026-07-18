@@ -7,7 +7,6 @@ use vm::{
 };
 
 use super::builder::UiBuilder;
-use super::dispatch::DispatchProgram;
 use super::model::{DispatchResult, ScriptError, UiEvent, UiState, UiTree};
 
 const MAX_SOURCE_BYTES: usize = 64 * 1024;
@@ -50,16 +49,14 @@ impl HostArgsFunction for CallbackHost {
 pub struct ExecutionContext {
     builder: Option<UiBuilder>,
     state: UiState,
-    event_name: String,
     tree: Option<UiTree>,
 }
 
 impl ExecutionContext {
-    fn new(state: UiState, event_name: impl Into<String>) -> Self {
+    fn new(state: UiState) -> Self {
         Self {
             builder: Some(UiBuilder::new()),
             state,
-            event_name: event_name.into(),
             tree: None,
         }
     }
@@ -111,10 +108,7 @@ enum UiOperation {
     TextInput,
     TextArea,
     Button,
-    BindClick,
-    OnClick,
     BindValue,
-    EventName,
     GetValue,
     SetValue,
     Finish,
@@ -157,23 +151,11 @@ impl UiOperation {
             },
             Self::Button => HostSignature {
                 name: "ui::button",
-                arity: 2,
-            },
-            Self::BindClick => HostSignature {
-                name: "ui::bind_click",
-                arity: 2,
-            },
-            Self::OnClick => HostSignature {
-                name: "ui::on_click",
-                arity: 2,
+                arity: 3,
             },
             Self::BindValue => HostSignature {
                 name: "ui::bind_value",
                 arity: 2,
-            },
-            Self::EventName => HostSignature {
-                name: "ui::event_name",
-                arity: 0,
             },
             Self::GetValue => HostSignature {
                 name: "ui::get_value",
@@ -191,7 +173,7 @@ impl UiOperation {
     }
 }
 
-const UI_OPERATIONS: [UiOperation; 16] = [
+const UI_OPERATIONS: [UiOperation; 13] = [
     UiOperation::Window,
     UiOperation::ColumnBegin,
     UiOperation::ColumnEnd,
@@ -201,18 +183,15 @@ const UI_OPERATIONS: [UiOperation; 16] = [
     UiOperation::TextInput,
     UiOperation::TextArea,
     UiOperation::Button,
-    UiOperation::BindClick,
-    UiOperation::OnClick,
     UiOperation::BindValue,
-    UiOperation::EventName,
     UiOperation::GetValue,
     UiOperation::SetValue,
     UiOperation::Finish,
 ];
 
 pub struct RssGpuiRuntime {
-    dispatcher: DispatchProgram,
-    modules: Vec<Arc<dyn HostModule>>,
+    vm: Vm,
+    context: ExecutionContextHandle,
     state: UiState,
     last_tree: Option<UiTree>,
 }
@@ -228,48 +207,104 @@ impl RssGpuiRuntime {
                 "RSS source exceeds {MAX_SOURCE_BYTES} byte limit"
             )));
         }
+        let compiled =
+            compile_source(&source).map_err(|error| ScriptError::new(error.to_string()))?;
+        validate_imports(&compiled.program.imports, &modules)?;
+
+        let context = Arc::new(Mutex::new(ExecutionContext::new(UiState::default())));
+        let mut vm = Vm::new(compiled.program);
+        vm.set_fuel_check_interval(VM_FUEL_CHECK_INTERVAL)
+            .map_err(|error| ScriptError::new(error.to_string()))?;
+        bind_ui_hosts(&mut vm, context.clone());
+        for module in &modules {
+            module.bind(&mut vm, context.clone())?;
+        }
+
         Ok(Self {
-            dispatcher: DispatchProgram::parse(source)?,
-            modules,
+            vm,
+            context,
             state: UiState::default(),
             last_tree: None,
         })
     }
 
     pub fn render(&mut self) -> Result<DispatchResult, ScriptError> {
-        let result = self.execute(self.dispatcher.render_source(), "")?;
+        if self.last_tree.is_some() {
+            self.vm.reset_for_reuse();
+        }
+        self.replace_context()?;
+        self.vm.set_fuel(VM_FUEL);
+        let status = self
+            .vm
+            .run()
+            .map_err(|error| ScriptError::new(error.to_string()))?;
+        if status != VmStatus::Halted {
+            return Err(ScriptError::new(format!(
+                "RSS script stopped with unexpected VM status {status:?}"
+            )));
+        }
+        let result = self.context_result()?;
         self.state = result.state.clone();
         self.last_tree = Some(result.tree.clone());
         Ok(result)
     }
 
     pub fn dispatch(&mut self, event: UiEvent) -> Result<DispatchResult, ScriptError> {
-        let event_name = match event {
-            UiEvent::InputChanged { ref id, value } => {
+        if self.last_tree.is_none() {
+            self.render()?;
+        }
+
+        match event {
+            UiEvent::InputChanged { id, value } => {
                 self.state.set(id.clone(), value);
-                self.propagate_value_bindings_from(id);
-                format!("input:{id}")
+                self.propagate_value_bindings_from(&id);
+                self.render()
             }
             UiEvent::Click(node_id) => {
-                if self.last_tree.is_none() {
-                    let initial = self.execute(self.dispatcher.render_source(), "")?;
-                    self.state = initial.state;
-                    self.last_tree = Some(initial.tree);
-                }
-                self.last_tree
+                let callback = self
+                    .last_tree
                     .as_ref()
-                    .and_then(|tree| tree.click_event(&node_id))
-                    .map(str::to_owned)
+                    .and_then(|tree| tree.click_callback(&node_id))
+                    .cloned()
                     .ok_or_else(|| {
-                        ScriptError::new(format!("script did not bind click event for '{node_id}'"))
-                    })?
+                        ScriptError::new(format!(
+                            "script did not declare a callback for '{node_id}'"
+                        ))
+                    })?;
+                self.replace_context()?;
+                self.vm.set_fuel(VM_FUEL);
+                self.vm
+                    .invoke_callable(callback, &[])
+                    .map_err(|error| ScriptError::new(error.to_string()))?;
+                self.state = self.context_state()?;
+                self.render()
             }
-        };
+        }
+    }
 
-        let result = self.execute(self.dispatcher.source_for(&event_name), &event_name)?;
-        self.state = result.state.clone();
-        self.last_tree = Some(result.tree.clone());
-        Ok(result)
+    fn replace_context(&self) -> Result<(), ScriptError> {
+        let mut context = self
+            .context
+            .lock()
+            .map_err(|_| ScriptError::new("RSS execution context lock was poisoned"))?;
+        *context = ExecutionContext::new(self.state.clone());
+        Ok(())
+    }
+
+    fn context_result(&self) -> Result<DispatchResult, ScriptError> {
+        self.context
+            .lock()
+            .map_err(|_| ScriptError::new("RSS execution context lock was poisoned"))?
+            .result()
+    }
+
+    fn context_state(&self) -> Result<UiState, ScriptError> {
+        Ok(self
+            .context
+            .lock()
+            .map_err(|_| ScriptError::new("RSS execution context lock was poisoned"))?
+            .state
+            .clone())
     }
 
     fn propagate_value_bindings_from(&mut self, source_id: &str) {
@@ -284,65 +319,34 @@ impl RssGpuiRuntime {
             self.state.set(target.to_string(), value.clone());
         }
     }
+}
 
-    fn execute(&self, source: &str, event_name: &str) -> Result<DispatchResult, ScriptError> {
-        let compiled =
-            compile_source(source).map_err(|error| ScriptError::new(error.to_string()))?;
-        let allowed = self.allowed_imports();
-        for import in &compiled.program.imports {
-            let expected_arity = allowed.get(import.name.as_str()).ok_or_else(|| {
-                ScriptError::new(format!("RSS import '{}' is not registered", import.name))
-            })?;
-            if import.arity != *expected_arity {
-                return Err(ScriptError::new(format!(
-                    "RSS import '{}' uses arity {}, expected {}",
-                    import.name, import.arity, expected_arity
-                )));
-            }
+fn validate_imports(
+    imports: &[vm::HostImport],
+    modules: &[Arc<dyn HostModule>],
+) -> Result<(), ScriptError> {
+    let mut allowed = BTreeMap::new();
+    for operation in UI_OPERATIONS {
+        let signature = operation.signature();
+        allowed.insert(signature.name, signature.arity);
+    }
+    for module in modules {
+        for signature in module.signatures() {
+            allowed.insert(signature.name, signature.arity);
         }
-
-        let context = Arc::new(Mutex::new(ExecutionContext::new(
-            self.state.clone(),
-            event_name,
-        )));
-        let mut vm = Vm::new(compiled.program);
-        vm.set_fuel_check_interval(VM_FUEL_CHECK_INTERVAL)
-            .map_err(|error| ScriptError::new(error.to_string()))?;
-        vm.set_fuel(VM_FUEL);
-        bind_ui_hosts(&mut vm, context.clone());
-        for module in &self.modules {
-            module.bind(&mut vm, context.clone())?;
-        }
-
-        let status = vm
-            .run()
-            .map_err(|error| ScriptError::new(error.to_string()))?;
-        if status != VmStatus::Halted {
+    }
+    for import in imports {
+        let expected_arity = allowed.get(import.name.as_str()).ok_or_else(|| {
+            ScriptError::new(format!("RSS import '{}' is not registered", import.name))
+        })?;
+        if import.arity != *expected_arity {
             return Err(ScriptError::new(format!(
-                "RSS script stopped with unexpected VM status {status:?}"
+                "RSS import '{}' uses arity {}, expected {}",
+                import.name, import.arity, expected_arity
             )));
         }
-        drop(vm);
-
-        context
-            .lock()
-            .map_err(|_| ScriptError::new("RSS execution context lock was poisoned"))?
-            .result()
     }
-
-    fn allowed_imports(&self) -> BTreeMap<&'static str, u8> {
-        let mut imports = BTreeMap::new();
-        for operation in UI_OPERATIONS {
-            let signature = operation.signature();
-            imports.insert(signature.name, signature.arity);
-        }
-        for module in &self.modules {
-            for signature in module.signatures() {
-                imports.insert(signature.name, signature.arity);
-            }
-        }
-        imports
-    }
+    Ok(())
 }
 
 fn bind_ui_hosts(vm: &mut Vm, context: ExecutionContextHandle) {
@@ -428,13 +432,7 @@ fn invoke_ui(
             host_result(context.builder_mut()?.button(
                 string_arg(args, 0, "ui::button")?.as_str(),
                 string_arg(args, 1, "ui::button")?.as_str(),
-            ))?;
-            unit()
-        }
-        UiOperation::BindClick | UiOperation::OnClick => {
-            host_result(context.builder_mut()?.bind_click(
-                string_arg(args, 0, "ui::bind_click")?.as_str(),
-                string_arg(args, 1, "ui::bind_click")?.as_str(),
+                callable_arg(args, 2, "ui::button")?,
             ))?;
             unit()
         }
@@ -445,9 +443,6 @@ fn invoke_ui(
             ))?;
             unit()
         }
-        UiOperation::EventName => Ok(CallOutcome::Return(CallReturn::one(Value::string(
-            context.event_name.clone(),
-        )))),
         UiOperation::GetValue => {
             let id = string_arg(args, 0, "ui::get_value")?;
             Ok(CallOutcome::Return(CallReturn::one(Value::string(
@@ -475,6 +470,15 @@ fn string_arg(args: &[Value], index: usize, host: &str) -> VmResult<String> {
         )));
     };
     Ok(value.as_str().into())
+}
+
+fn callable_arg(args: &[Value], index: usize, host: &str) -> VmResult<Value> {
+    let Some(value @ Value::Callable(_)) = args.get(index) else {
+        return Err(VmError::HostError(format!(
+            "{host} argument {index} must be callable"
+        )));
+    };
+    Ok(value.clone())
 }
 
 fn int_arg(args: &[Value], index: usize, host: &str) -> VmResult<i64> {

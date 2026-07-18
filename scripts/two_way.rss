@@ -15,30 +15,25 @@ ui::label("status_b", ui::get_value("status"));
 ui::column_end();
 ui::row_end();
 ui::row_begin("actions");
-ui::button("format", "Format A");
-ui::button("save", "Save note");
+ui::button("format", "Format A", || format_note());
+ui::button("save", "Save note", || save_note());
 ui::row_end();
 ui::label("status", ui::get_value("status"));
 ui::column_end();
 
 ui::bind_value("a", "b");
 ui::bind_value("b", "a");
+ui::finish();
 
-ui::bind_click("format", "format");
-ui::bind_click("save", "save");
-
-ui::on("format", || {
+fn format_note() -> string {
     let formatted: string = notepad::format_note(ui::get_value("a"));
     ui::set_value("a", formatted);
     ui::set_value("status", "Formatted through RustScript");
-});
+    ui::get_value("status")
+}
 
-ui::on("save", || {
-    let saved: string = notepad::save_note(
-        ui::get_value("status"),
-        ui::get_value("a"),
-    );
+fn save_note() -> string {
+    let saved: string = notepad::save_note(ui::get_value("status"), ui::get_value("a"));
     ui::set_value("status", saved);
-});
-
-ui::finish();
+    ui::get_value("status")
+}

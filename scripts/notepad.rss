@@ -6,23 +6,22 @@ ui::column_begin("root");
 ui::text_input("title", "Title", "Untitled", "Note title");
 ui::text_area("body", "Body", "", "Write here...");
 ui::row_begin("actions");
-ui::button("format", "Format");
-ui::on_click("format", "format");
-ui::button("save", "Save");
-ui::on_click("save", "save");
+ui::button("format", "Format", || format_note());
+ui::button("save", "Save", || save_note());
 ui::row_end();
 ui::label("status", ui::get_value("status"));
 ui::column_end();
+ui::finish();
 
-ui::on("format", || {
+fn format_note() -> string {
     let formatted: string = notepad::format_note(ui::get_value("body"));
     ui::set_value("body", formatted);
     ui::set_value("status", "Formatted through RustScript");
-});
+    ui::get_value("status")
+}
 
-ui::on("save", || {
+fn save_note() -> string {
     let saved: string = notepad::save_note(ui::get_value("title"), ui::get_value("body"));
     ui::set_value("status", saved);
-});
-
-ui::finish();
+    ui::get_value("status")
+}

@@ -10,10 +10,8 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use super::model::{DispatchResult, NodeKind, ScriptError, UiEvent, UiNode, UiState, UiTree};
 use super::runtime::RssGpuiRuntime;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RenderButton {
-    pub event_name: String,
-}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RenderButton;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RenderPlan {
@@ -33,15 +31,8 @@ impl RenderPlan {
 }
 
 fn collect_buttons(tree: &UiTree, node: &UiNode, buttons: &mut BTreeMap<String, RenderButton>) {
-    if matches!(node.kind, NodeKind::Button { .. })
-        && let Some(event_name) = tree.click_event(&node.id)
-    {
-        buttons.insert(
-            node.id.clone(),
-            RenderButton {
-                event_name: event_name.into(),
-            },
-        );
+    if matches!(node.kind, NodeKind::Button { .. }) && tree.click_callback(&node.id).is_some() {
+        buttons.insert(node.id.clone(), RenderButton);
     }
     for child in &node.children {
         collect_buttons(tree, child, buttons);

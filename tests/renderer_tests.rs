@@ -1,22 +1,18 @@
-use rustscript_gpui_notepad::rss_gpui::builder::UiBuilder;
 use rustscript_gpui_notepad::rss_gpui::renderer::RenderPlan;
+use rustscript_gpui_notepad::rss_gpui::runtime::RssGpuiRuntime;
 
 #[test]
-fn render_plan_keeps_script_button_event_name() {
-    let mut builder = UiBuilder::new();
-    builder
-        .window("Demo", 640, 480)
-        .expect("window should build");
-    builder.button("save", "Save").expect("button should build");
-    builder
-        .bind_click("save", "save-note")
-        .expect("binding should build");
-    let tree = builder.finish().expect("tree should finish");
+fn render_plan_keeps_script_button_callback() {
+    let source = r#"
+        use ui;
+        ui::window("Demo", 640, 480);
+        ui::button("save", "Save", || ui::set_value("status", "saved"));
+        ui::finish();
+    "#;
+    let mut runtime = RssGpuiRuntime::from_source(source, vec![]).expect("script should load");
+    let tree = runtime.render().expect("script should render").tree;
 
     let plan = RenderPlan::from_tree(&tree);
 
-    assert_eq!(
-        plan.button("save").expect("button exists").event_name,
-        "save-note"
-    );
+    assert!(plan.button("save").is_some());
 }

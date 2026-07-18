@@ -1,14 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use vm::Value;
+
 use super::model::{NodeKind, ScriptError, UiNode, UiTree, WindowSpec};
 
 pub struct UiBuilder {
     window: Option<WindowSpec>,
     stack: Vec<UiNode>,
     node_ids: BTreeSet<String>,
-    click_bindings: BTreeMap<String, String>,
+    click_callbacks: BTreeMap<String, Value>,
     value_bindings: Vec<(String, String)>,
-    buttons: BTreeSet<String>,
     text_input_ids: BTreeSet<String>,
     text_area_ids: BTreeSet<String>,
     finished: bool,
@@ -20,9 +21,8 @@ impl UiBuilder {
             window: None,
             stack: vec![UiNode::root()],
             node_ids: BTreeSet::new(),
-            click_bindings: BTreeMap::new(),
+            click_callbacks: BTreeMap::new(),
             value_bindings: Vec::new(),
-            buttons: BTreeSet::new(),
             text_input_ids: BTreeSet::new(),
             text_area_ids: BTreeSet::new(),
             finished: false,
@@ -96,30 +96,17 @@ impl UiBuilder {
         )
     }
 
-    pub fn button(&mut self, id: &str, label: &str) -> Result<(), ScriptError> {
+    pub fn button(&mut self, id: &str, label: &str, callback: Value) -> Result<(), ScriptError> {
+        if !matches!(callback, Value::Callable(_)) {
+            return Err(ScriptError::new("ui::button callback must be callable"));
+        }
         self.insert_leaf(
             id,
             NodeKind::Button {
                 label: label.into(),
             },
         )?;
-        self.buttons.insert(id.into());
-        Ok(())
-    }
-
-    pub fn bind_click(&mut self, node_id: &str, event_name: &str) -> Result<(), ScriptError> {
-        if !self.buttons.contains(node_id) {
-            return Err(ScriptError::new(format!(
-                "ui::bind_click references unknown button '{node_id}'"
-            )));
-        }
-        if event_name.is_empty() {
-            return Err(ScriptError::new(
-                "ui::bind_click event name must not be empty",
-            ));
-        }
-        self.click_bindings
-            .insert(node_id.into(), event_name.into());
+        self.click_callbacks.insert(id.into(), callback);
         Ok(())
     }
 
@@ -160,7 +147,7 @@ impl UiBuilder {
         Ok(UiTree::new(
             window,
             root,
-            self.click_bindings,
+            self.click_callbacks,
             self.value_bindings,
         ))
     }

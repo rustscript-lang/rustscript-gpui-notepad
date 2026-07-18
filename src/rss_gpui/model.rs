@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
+use vm::Value;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScriptError {
     message: String,
@@ -73,11 +75,11 @@ impl UiNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct UiTree {
     pub window: WindowSpec,
     pub root: UiNode,
-    click_bindings: BTreeMap<String, String>,
+    click_callbacks: BTreeMap<String, Value>,
     value_bindings: Vec<(String, String)>,
 }
 
@@ -85,19 +87,19 @@ impl UiTree {
     pub(crate) fn new(
         window: WindowSpec,
         root: UiNode,
-        click_bindings: BTreeMap<String, String>,
+        click_callbacks: BTreeMap<String, Value>,
         value_bindings: Vec<(String, String)>,
     ) -> Self {
         Self {
             window,
             root,
-            click_bindings,
+            click_callbacks,
             value_bindings,
         }
     }
 
-    pub fn click_event(&self, node_id: &str) -> Option<&str> {
-        self.click_bindings.get(node_id).map(String::as_str)
+    pub fn click_callback(&self, node_id: &str) -> Option<&Value> {
+        self.click_callbacks.get(node_id)
     }
 
     pub fn value_binding_targets(&self, source: &str) -> Vec<&str> {
@@ -139,7 +141,7 @@ pub enum UiEvent {
     InputChanged { id: String, value: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct DispatchResult {
     pub tree: UiTree,
     pub state: UiState,
