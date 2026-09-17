@@ -14,7 +14,7 @@ ui::finish();
 
 #[test]
 fn script_keeps_anonymous_button_callback_and_updates_state() {
-    let mut runtime = RssGpuiRuntime::from_source(SCRIPT, vec![]).expect("script should load");
+    let mut runtime = RssGpuiRuntime::from_source(SCRIPT).expect("script should load");
 
     let result = runtime
         .dispatch(UiEvent::Click("format".into()))

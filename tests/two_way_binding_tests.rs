@@ -15,7 +15,7 @@ fn two_way_binding_source() -> &'static str {
 
 #[test]
 fn two_way_binding_propagates_input_change_across_fields() {
-    let mut runtime = RssGpuiRuntime::from_source(two_way_binding_source(), vec![]).unwrap();
+    let mut runtime = RssGpuiRuntime::from_source(two_way_binding_source()).unwrap();
     runtime.render().unwrap();
 
     let result = runtime
@@ -31,7 +31,7 @@ fn two_way_binding_propagates_input_change_across_fields() {
 
 #[test]
 fn two_way_binding_propagates_in_reverse_direction() {
-    let mut runtime = RssGpuiRuntime::from_source(two_way_binding_source(), vec![]).unwrap();
+    let mut runtime = RssGpuiRuntime::from_source(two_way_binding_source()).unwrap();
     runtime.render().unwrap();
 
     let result = runtime
@@ -47,7 +47,7 @@ fn two_way_binding_propagates_in_reverse_direction() {
 
 #[test]
 fn two_way_binding_does_not_mutate_when_source_is_unchanged() {
-    let mut runtime = RssGpuiRuntime::from_source(two_way_binding_source(), vec![]).unwrap();
+    let mut runtime = RssGpuiRuntime::from_source(two_way_binding_source()).unwrap();
     runtime.render().unwrap();
 
     let seed = runtime
@@ -78,7 +78,7 @@ fn one_way_binding_runs_without_compiler_change() {
         ui::bind_value("left", "right");
         ui::finish();
     "#;
-    let mut runtime = RssGpuiRuntime::from_source(source, vec![]).unwrap();
+    let mut runtime = RssGpuiRuntime::from_source(source).unwrap();
     runtime.render().unwrap();
 
     let result = runtime
@@ -111,7 +111,7 @@ fn bind_value_rejects_self_loop() {
         ui::bind_value("solo", "solo");
         ui::finish();
     "#;
-    let err = RssGpuiRuntime::from_source(source, vec![])
+    let err = RssGpuiRuntime::from_source(source)
         .unwrap()
         .render()
         .expect_err("should fail for self-loop binding");
@@ -130,7 +130,7 @@ fn bind_value_rejects_when_target_does_not_exist() {
         ui::bind_value("src", "ghost");
         ui::finish();
     "#;
-    let err = RssGpuiRuntime::from_source(source, vec![])
+    let err = RssGpuiRuntime::from_source(source)
         .unwrap()
         .render()
         .expect_err("should fail for dangling binding");

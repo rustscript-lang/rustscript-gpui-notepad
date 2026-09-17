@@ -9,7 +9,7 @@ fn render_plan_keeps_script_button_callback() {
         ui::button("save", "Save", || ui::set_value("status", "saved"));
         ui::finish();
     "#;
-    let mut runtime = RssGpuiRuntime::from_source(source, vec![]).expect("script should load");
+    let mut runtime = RssGpuiRuntime::from_source(source).expect("script should load");
     let tree = runtime.render().expect("script should render").tree;
 
     let plan = RenderPlan::from_tree(&tree);
