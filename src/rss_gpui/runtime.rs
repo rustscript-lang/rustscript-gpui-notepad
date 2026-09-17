@@ -230,7 +230,7 @@ impl RssGpuiRuntime {
 
     pub fn render(&mut self) -> Result<DispatchResult, ScriptError> {
         if self.last_tree.is_some() {
-            self.vm.reset_for_reuse();
+            self.reset_vm()?;
         }
         self.replace_context()?;
         self.vm.set_fuel(VM_FUEL);
@@ -280,6 +280,18 @@ impl RssGpuiRuntime {
                 self.render()
             }
         }
+    }
+
+    fn reset_vm(&mut self) -> Result<(), ScriptError> {
+        self.vm
+            .reset_for_reuse()
+            .map_err(|error| ScriptError::new(error.to_string()))?;
+        if self.vm.scope_reset_pending() {
+            return Err(ScriptError::new(
+                "RSS VM reset did not reach a reusable execution scope",
+            ));
+        }
+        Ok(())
     }
 
     fn replace_context(&self) -> Result<(), ScriptError> {
