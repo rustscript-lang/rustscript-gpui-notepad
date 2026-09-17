@@ -8,7 +8,7 @@ license = "MIT"
 [dependencies]
 gpui = "0.2.2"
 gpui-component = "0.5.1"
-vm = { package = "pd-vm", path = "/home/wow/rustscript/rustscript", default-features = false, features = ["runtime"] }
+vm = { package = "pd-vm", git = "https://github.com/rustscript-lang/rustscript", rev = "b1d6cffede77f49410bf63525f30b9a46b02dc01", default-features = false, features = ["runtime"] }
 
 [dev-dependencies]
 tempfile = "3"
