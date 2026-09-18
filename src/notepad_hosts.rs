@@ -1,72 +1,101 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use vm::{CallOutcome, CallReturn, Value, Vm, VmError, VmResult};
-
-use crate::rss_gpui::model::ScriptError;
-use crate::rss_gpui::runtime::{
-    CallbackHost, ExecutionContextHandle, HostModule, HostSignature, RssGpuiRuntime,
+use vm::{
+    CallOutcome, CallReturn, HostAdapterDescriptor, HostBindingDescriptor, HostBindingKind,
+    HostEffect, HostFunctionDescriptor, HostFunctionSchema, HostModuleDescriptor, HostParamSchema,
+    HostState, HostStateEffect, HostTypeSchema, Value, Vm, VmError, VmResult,
 };
 
-pub struct NotepadHostModule {
-    notes_directory: Arc<PathBuf>,
+pub struct NotesDirectory {
+    path: PathBuf,
 }
 
-impl NotepadHostModule {
-    pub fn new(notes_directory: impl Into<PathBuf>) -> Self {
-        Self {
-            notes_directory: Arc::new(notes_directory.into()),
-        }
+impl NotesDirectory {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    fn as_path(&self) -> &Path {
+        &self.path
     }
 }
 
-impl HostModule for NotepadHostModule {
-    fn signatures(&self) -> Vec<HostSignature> {
-        vec![
-            HostSignature {
-                name: "notepad::format_note",
-                arity: 1,
-            },
-            HostSignature {
-                name: "notepad::save_note",
-                arity: 2,
-            },
-        ]
-    }
+impl HostState for NotesDirectory {
+    const KEY: &'static str = "notepad.notes_directory";
 
-    fn bind(&self, vm: &mut Vm, _context: ExecutionContextHandle) -> Result<(), ScriptError> {
-        vm.bind_args_function(
+    fn initialize() -> Result<Self, String> {
+        Err("notepad notes directory is not configured".into())
+    }
+}
+
+pub fn notepad_host_module() -> HostModuleDescriptor {
+    HostModuleDescriptor {
+        name: "notepad",
+        functions: &[format_note_descriptor, save_note_descriptor],
+        resources: &[],
+    }
+}
+
+fn format_note_descriptor() -> HostFunctionDescriptor {
+    HostFunctionDescriptor {
+        schema: HostFunctionSchema::with_return(
             "notepad::format_note",
-            Box::new(CallbackHost::new(|args| {
-                let text = string_arg(args, 0, "notepad::format_note")?;
-                Ok(CallOutcome::Return(CallReturn::one(Value::string(
-                    format_note(&text),
-                ))))
-            })),
-        );
-
-        let notes_directory = self.notes_directory.clone();
-        vm.bind_args_function(
-            "notepad::save_note",
-            Box::new(CallbackHost::new(move |args| {
-                let title = string_arg(args, 0, "notepad::save_note")?;
-                let body = string_arg(args, 1, "notepad::save_note")?;
-                let path = save_note(notes_directory.as_ref(), &title, &body)?;
-                Ok(CallOutcome::Return(CallReturn::one(Value::string(
-                    path.to_string_lossy().into_owned(),
-                ))))
-            })),
-        );
-
-        Ok(())
+            vec![HostParamSchema::value("text", HostTypeSchema::String)],
+            HostTypeSchema::String,
+        )
+        .with_description("Normalize notepad body whitespace"),
+        binding: HostBindingDescriptor {
+            kind: HostBindingKind::StaticNonYieldingArgs,
+        },
+        effects: Vec::new(),
+        adapter: HostAdapterDescriptor::StaticNonYieldingArgs(format_note_host),
+        resource_types: Vec::new(),
     }
 }
 
-pub fn notepad_runtime(notes_directory: impl Into<PathBuf>) -> Result<RssGpuiRuntime, ScriptError> {
-    RssGpuiRuntime::from_source(
-        include_str!("../scripts/notepad.rss"),
-        vec![Arc::new(NotepadHostModule::new(notes_directory))],
-    )
+fn save_note_descriptor() -> HostFunctionDescriptor {
+    HostFunctionDescriptor {
+        schema: HostFunctionSchema::with_return(
+            "notepad::save_note",
+            vec![
+                HostParamSchema::value("title", HostTypeSchema::String),
+                HostParamSchema::value("body", HostTypeSchema::String),
+            ],
+            HostTypeSchema::String,
+        )
+        .with_description("Write a markdown note and return its path"),
+        binding: HostBindingDescriptor {
+            kind: HostBindingKind::StaticStack,
+        },
+        effects: vec![HostEffect::HostState(
+            HostStateEffect::read::<NotesDirectory>(),
+        )],
+        adapter: HostAdapterDescriptor::StaticStack(save_note_host),
+        resource_types: Vec::new(),
+    }
+}
+
+fn format_note_host(args: &[Value]) -> VmResult<CallOutcome> {
+    let text = string_arg(args, 0, "notepad::format_note")?;
+    Ok(CallOutcome::Return(CallReturn::one(Value::string(
+        format_note(&text),
+    ))))
+}
+
+fn save_note_host(vm: &mut Vm, args: &[Value]) -> VmResult<CallOutcome> {
+    let title = string_arg(args, 0, "notepad::save_note")?;
+    let body = string_arg(args, 1, "notepad::save_note")?;
+    let mut context = vm.host_context();
+    context
+        .ensure_host_state::<NotesDirectory>("notepad::save_note", "read")
+        .map_err(|error| VmError::HostError(error.to_string()))?;
+    let directory = context
+        .host_state_ref::<NotesDirectory>("notepad::save_note", "read")
+        .map_err(|error| VmError::HostError(error.to_string()))?;
+    let path = save_note(directory.as_path(), &title, &body)?;
+    Ok(CallOutcome::Return(CallReturn::one(Value::string(
+        path.to_string_lossy().into_owned(),
+    ))))
 }
 
 fn format_note(text: &str) -> String {

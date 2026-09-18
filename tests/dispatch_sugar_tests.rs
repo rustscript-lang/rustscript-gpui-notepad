@@ -15,7 +15,7 @@ ui::finish();
 
 #[test]
 fn anonymous_button_callbacks_run_without_an_event_dispatcher() {
-    let mut runtime = RssGpuiRuntime::from_source(SCRIPT, vec![]).expect("script should load");
+    let mut runtime = RssGpuiRuntime::from_source(SCRIPT).expect("script should load");
 
     let formatted = runtime
         .dispatch(UiEvent::Click("format".into()))
