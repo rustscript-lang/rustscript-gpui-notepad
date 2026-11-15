@@ -3989,8 +3989,17 @@ dependencies = [
 name = "pd-host-function"
 version = "0.1.0"
 dependencies = [
+ "pd-host-schema",
  "proc-macro2",
  "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "pd-host-schema"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
  "syn 2.0.119",
 ]
 
@@ -4003,6 +4012,7 @@ dependencies = [
  "libc",
  "paste",
  "pd-host-function",
+ "pd-host-schema",
  "regex",
  "rt-format",
  "self_cell",
