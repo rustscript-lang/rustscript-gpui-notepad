@@ -118,7 +118,7 @@ fn ui_window_descriptor() -> HostFunctionDescriptor {
                 HostParamSchema::value("width", HostTypeSchema::Int),
                 HostParamSchema::value("height", HostTypeSchema::Int),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Declare the GPUI window title and size"),
         ui_window,
@@ -130,7 +130,7 @@ fn ui_column_begin_descriptor() -> HostFunctionDescriptor {
         HostFunctionSchema::with_return(
             "ui::column_begin",
             vec![HostParamSchema::value("id", HostTypeSchema::String)],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Open a column container"),
         ui_column_begin,
@@ -139,7 +139,7 @@ fn ui_column_begin_descriptor() -> HostFunctionDescriptor {
 
 fn ui_column_end_descriptor() -> HostFunctionDescriptor {
     ui_write_descriptor(
-        HostFunctionSchema::with_return("ui::column_end", Vec::new(), HostTypeSchema::Null)
+        HostFunctionSchema::with_return("ui::column_end", Vec::new(), HostTypeSchema::Unit)
             .with_description("Close the current column container"),
         ui_column_end,
     )
@@ -150,7 +150,7 @@ fn ui_row_begin_descriptor() -> HostFunctionDescriptor {
         HostFunctionSchema::with_return(
             "ui::row_begin",
             vec![HostParamSchema::value("id", HostTypeSchema::String)],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Open a row container"),
         ui_row_begin,
@@ -159,7 +159,7 @@ fn ui_row_begin_descriptor() -> HostFunctionDescriptor {
 
 fn ui_row_end_descriptor() -> HostFunctionDescriptor {
     ui_write_descriptor(
-        HostFunctionSchema::with_return("ui::row_end", Vec::new(), HostTypeSchema::Null)
+        HostFunctionSchema::with_return("ui::row_end", Vec::new(), HostTypeSchema::Unit)
             .with_description("Close the current row container"),
         ui_row_end,
     )
@@ -173,7 +173,7 @@ fn ui_label_descriptor() -> HostFunctionDescriptor {
                 HostParamSchema::value("id", HostTypeSchema::String),
                 HostParamSchema::value("text", HostTypeSchema::String),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Insert a text label"),
         ui_label,
@@ -190,7 +190,7 @@ fn ui_text_input_descriptor() -> HostFunctionDescriptor {
                 HostParamSchema::value("default_value", HostTypeSchema::String),
                 HostParamSchema::value("placeholder", HostTypeSchema::String),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Insert a single-line text input"),
         ui_text_input,
@@ -207,7 +207,7 @@ fn ui_text_area_descriptor() -> HostFunctionDescriptor {
                 HostParamSchema::value("default_value", HostTypeSchema::String),
                 HostParamSchema::value("placeholder", HostTypeSchema::String),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Insert a multi-line text area"),
         ui_text_area,
@@ -229,7 +229,7 @@ fn ui_button_descriptor() -> HostFunctionDescriptor {
                     },
                 ),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description(
             "Insert a button whose callback is stored on UiTree and invoked with invoke_callable; \
@@ -247,7 +247,7 @@ fn ui_bind_value_descriptor() -> HostFunctionDescriptor {
                 HostParamSchema::value("source", HostTypeSchema::String),
                 HostParamSchema::value("target", HostTypeSchema::String),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Bind one input value onto another"),
         ui_bind_value,
@@ -281,7 +281,7 @@ fn ui_set_value_descriptor() -> HostFunctionDescriptor {
                 HostParamSchema::value("id", HostTypeSchema::String),
                 HostParamSchema::value("value", HostTypeSchema::String),
             ],
-            HostTypeSchema::Null,
+            HostTypeSchema::Unit,
         )
         .with_description("Write a UI state string"),
         ui_set_value,
@@ -290,7 +290,7 @@ fn ui_set_value_descriptor() -> HostFunctionDescriptor {
 
 fn ui_finish_descriptor() -> HostFunctionDescriptor {
     ui_write_descriptor(
-        HostFunctionSchema::with_return("ui::finish", Vec::new(), HostTypeSchema::Null)
+        HostFunctionSchema::with_return("ui::finish", Vec::new(), HostTypeSchema::Unit)
             .with_description("Finish the current UI tree"),
         ui_finish,
     )

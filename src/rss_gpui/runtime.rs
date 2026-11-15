@@ -256,19 +256,24 @@ fn validate_imports(imports: &[HostImport], catalog: &HostApiCatalog) -> Result<
 fn value_type_of(schema: &HostTypeSchema) -> Result<ValueType, ScriptError> {
     match schema {
         HostTypeSchema::Unknown => Ok(ValueType::Unknown),
-        HostTypeSchema::Null => Ok(ValueType::Null),
+        HostTypeSchema::Null | HostTypeSchema::Unit => Ok(ValueType::Null),
         HostTypeSchema::Int => Ok(ValueType::Int),
-        HostTypeSchema::Float | HostTypeSchema::Number => Ok(ValueType::Float),
+        HostTypeSchema::Float => Ok(ValueType::Float),
+        HostTypeSchema::Number => Ok(ValueType::Unknown),
         HostTypeSchema::Bool => Ok(ValueType::Bool),
         HostTypeSchema::String => Ok(ValueType::String),
         HostTypeSchema::Bytes => Ok(ValueType::Bytes),
         HostTypeSchema::Array(_) => Ok(ValueType::Array),
         HostTypeSchema::Map(_) => Ok(ValueType::Map),
         HostTypeSchema::Optional(inner) => value_type_of(inner),
+        HostTypeSchema::Option(_) => Ok(ValueType::Map),
         HostTypeSchema::Callable { .. } => Ok(ValueType::Callable),
         HostTypeSchema::Named { .. } => Ok(ValueType::Map),
         HostTypeSchema::Resource(_) => Err(ScriptError::new(
             "RSS host catalogs must not expose resource returns from ui/notepad hosts",
+        )),
+        HostTypeSchema::Result { .. } => Err(ScriptError::new(
+            "RSS host catalogs must not expose Result returns from ui/notepad hosts",
         )),
     }
 }

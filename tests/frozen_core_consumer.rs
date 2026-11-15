@@ -100,7 +100,7 @@ fn null_adapter(_args: &[Value]) -> VmResult<CallOutcome> {
 
 fn probe_early_descriptor() -> HostFunctionDescriptor {
     HostFunctionDescriptor {
-        schema: HostFunctionSchema::with_return("probe::early", Vec::new(), HostTypeSchema::Null)
+        schema: HostFunctionSchema::with_return("probe::early", Vec::new(), HostTypeSchema::Unit)
             .with_description("First probe host used by rollback tests"),
         binding: HostBindingDescriptor {
             kind: HostBindingKind::StaticArgs,
@@ -113,7 +113,7 @@ fn probe_early_descriptor() -> HostFunctionDescriptor {
 
 fn probe_late_ok_descriptor() -> HostFunctionDescriptor {
     HostFunctionDescriptor {
-        schema: HostFunctionSchema::with_return("probe::late", Vec::new(), HostTypeSchema::Null)
+        schema: HostFunctionSchema::with_return("probe::late", Vec::new(), HostTypeSchema::Unit)
             .with_description("Matching late probe host"),
         binding: HostBindingDescriptor {
             kind: HostBindingKind::StaticArgs,
@@ -126,7 +126,7 @@ fn probe_late_ok_descriptor() -> HostFunctionDescriptor {
 
 fn probe_late_mismatch_descriptor() -> HostFunctionDescriptor {
     HostFunctionDescriptor {
-        schema: HostFunctionSchema::with_return("probe::late", Vec::new(), HostTypeSchema::Null)
+        schema: HostFunctionSchema::with_return("probe::late", Vec::new(), HostTypeSchema::Unit)
             .with_description("Late probe host with a binding/adapter mismatch"),
         binding: HostBindingDescriptor {
             kind: HostBindingKind::StaticStack,
